@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X, ChevronRight } from "lucide-react";
-import { useRegisterModal } from "@/context/RegisterModalContext";
-import { navLinks, handleNavClick } from "@/config/navigation";
+import { useNavigate, useLocation } from "react-router-dom";
+import { navLinks, scrollToSection } from "@/config/navigation";
 import logo from "@/assets/EdustackLogo.png";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const { openModal } = useRegisterModal();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 20);
@@ -17,8 +18,14 @@ const Navbar = () => {
   }, []);
 
   const onNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-    handleNavClick(e, href);
+    e.preventDefault();
     setOpen(false);
+
+    if (location.pathname !== "/") {
+      navigate("/" + href);
+    } else {
+      scrollToSection(href);
+    }
   };
 
   return (
@@ -64,7 +71,7 @@ const Navbar = () => {
             variant="gold"
             size="lg"
             className="cta-shimmer cta-hover"
-            onClick={openModal}
+            onClick={() => navigate('/register')}
           >
             Register Now <ChevronRight size={16} />
           </Button>
@@ -100,7 +107,7 @@ const Navbar = () => {
               className="mt-2 cta-shimmer cta-hover"
               onClick={() => {
                 setOpen(false);
-                openModal();
+                navigate('/register');
               }}
             >
               Register Now

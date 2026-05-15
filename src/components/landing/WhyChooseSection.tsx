@@ -1,6 +1,6 @@
 import { CheckCircle2, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useRegisterModal } from "@/context/RegisterModalContext";
+import { useNavigate } from "react-router-dom";
 
 
 const features = [
@@ -18,7 +18,7 @@ const features = [
 ];
 
 const WhySection = () => {
-  const { openModal } = useRegisterModal();
+  const navigate = useNavigate();
 
   return (
     <section
@@ -69,7 +69,7 @@ const WhySection = () => {
             variant="gold"
             size="xl"
             className="shadow-gold cta-shimmer cta-hover px-8 py-6 text-lg"
-            onClick={openModal}
+            onClick={() => navigate('/register')}
           >
             Register Now <ChevronRight size={18} />
           </Button>

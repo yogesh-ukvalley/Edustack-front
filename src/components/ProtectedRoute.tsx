@@ -3,13 +3,12 @@ import { useAuth } from "@/context/AuthContext";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
+  requiredRole?: string;
 }
 
-// Protected route component - redirects to /admin (login page) if not authenticated
-const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const { isAuthenticated, isLoading } = useAuth();
+const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
+  const { isAuthenticated, isLoading, admin } = useAuth();
 
-  // Show loading state while checking authentication
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -18,9 +17,12 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     );
   }
 
-  // Redirect to /admin (login page) if not authenticated
   if (!isAuthenticated) {
     return <Navigate to="/admin" replace />;
+  }
+
+  if (requiredRole && admin?.role !== requiredRole) {
+    return <Navigate to="/admin/dashboard" replace />;
   }
 
   return <>{children}</>;

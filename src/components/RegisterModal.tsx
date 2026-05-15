@@ -124,7 +124,7 @@
 //         setSubmitStatus("success");
 //         setTimeout(() => {
 //           closeModal();
-//           window.location.href = "https://edustacklms.valleyhoster.com/register";
+//           window.location.href = "https://lms.edustack.ca/register";
 //         }, 1500);
 //       } else {
 //         setSubmitStatus("error");
@@ -442,7 +442,7 @@ const RegisterModal = () => {
         setSubmitStatus("success");
         setTimeout(() => {
           closeModal();
-          window.location.href = "https://edustacklms.valleyhoster.com/register";
+          window.location.href = "https://lms.edustack.ca/register";
         }, 1500);
       } else {
         setSubmitStatus("error");

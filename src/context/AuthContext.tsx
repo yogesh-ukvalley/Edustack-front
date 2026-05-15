@@ -5,6 +5,8 @@ interface AdminUser {
   id: string;
   email: string;
   name?: string;
+  role?: string;
+  isActive?: boolean;
 }
 
 // Auth context type
@@ -15,11 +17,12 @@ interface AuthContextType {
   login: (token: string, admin: AdminUser) => void;
   logout: () => void;
   isAuthenticated: boolean;
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Storage key for token
+// Storage keys
 const TOKEN_KEY = "admin_token";
 const ADMIN_KEY = "admin_user";
 
@@ -38,7 +41,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setToken(storedToken);
         setAdmin(JSON.parse(storedAdmin));
       } catch {
-        // Invalid stored data, clear it
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(ADMIN_KEY);
       }
@@ -46,7 +48,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(false);
   }, []);
 
-  // Login function - stores token and admin info
+  // Login function
   const login = (newToken: string, adminData: AdminUser) => {
     localStorage.setItem(TOKEN_KEY, newToken);
     localStorage.setItem(ADMIN_KEY, JSON.stringify(adminData));
@@ -54,7 +56,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setAdmin(adminData);
   };
 
-  // Logout function - clears token and admin info
+  // Logout function
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(ADMIN_KEY);
@@ -71,6 +73,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         login,
         logout,
         isAuthenticated: !!token,
+        isSuperAdmin: admin?.role === "super-admin",
       }}
     >
       {children}

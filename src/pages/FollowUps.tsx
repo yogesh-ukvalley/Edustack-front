@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Users, Mail, Phone, BookOpen, Calendar as CalendarIcon, RefreshCw, AlertCircle, LogOut, Clock, UserCog, ClipboardList, Search, Filter, X, Eye, Save, UserCheck } from "lucide-react";
+import { Clock, UserCog, ClipboardList, LogOut, RefreshCw, AlertCircle, Users, BookOpen, Phone, Mail, Calendar as CalendarIcon, Search, X, Eye, Save, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { API_ENDPOINTS } from "@/config/api";
@@ -25,19 +25,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-
-const LEAD_STATUSES = [
-  "New Lead",
-  "Connected",
-  "Interested",
-  "Follow-up Required",
-  "Follow-up Set",
-  "Qualified",
-  "Not Interested",
-  "Other",
-] as const;
 
 const STATUS_COLORS: Record<string, string> = {
   "New Lead": "bg-blue-100 text-blue-700 border-blue-200",
@@ -50,11 +38,18 @@ const STATUS_COLORS: Record<string, string> = {
   "Other": "bg-purple-100 text-purple-700 border-purple-200",
 };
 
-// Returns "Follow-up Set" if status is "Follow-up Required" and a followUpDate is assigned
-const getDisplayStatus = (contact: Contact): string => {
-  if (contact.status === "Follow-up Required" && contact.followUpDate) return "Follow-up Set";
-  return contact.status || "New Lead";
-};
+const LEAD_STATUSES = [
+  "New Lead",
+  "Connected",
+  "Interested",
+  "Follow-up Required",
+  "Follow-up Set",
+  "Qualified",
+  "Not Interested",
+  "Other",
+] as const;
+
+type FilterPeriod = "all" | "today" | "overdue" | "upcoming";
 
 interface Contact {
   _id: string;
@@ -62,27 +57,47 @@ interface Contact {
   email: string;
   mobileNo: string;
   courses: string[];
-  createdAt: string;
   status?: string;
   statusNote?: string;
   followUpDate?: string;
   assignedTo?: { _id: string; name: string; email: string } | null;
+  createdAt: string;
 }
 
-const Admin = () => {
+// Parse a date string as local midnight (avoids UTC timezone shift)
+const toLocalDate = (dateStr: string): Date => {
+  const [y, m, d] = dateStr.split("T")[0].split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+
+const formatDate = (dateString: string) => {
+  return toLocalDate(dateString).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+};
+
+// Convert a Date object to YYYY-MM-DD using local timezone
+const toLocalDateStr = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+// Returns "Follow-up Set" if status is "Follow-up Required" and a followUpDate is assigned
+const getDisplayStatus = (contact: Contact): string => {
+  if (contact.status === "Follow-up Required" && contact.followUpDate) return "Follow-up Set";
+  return contact.status || "New Lead";
+};
+
+const FollowUps = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, admin, token, isSuperAdmin } = useAuth();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-
-  // Search & filter state
+  const [filter, setFilter] = useState<FilterPeriod>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterCourse, setFilterCourse] = useState<string>("all");
-  const [showFilters, setShowFilters] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
@@ -102,16 +117,16 @@ const Admin = () => {
     navigate("/admin");
   };
 
-  const fetchContacts = useCallback(async () => {
+  const fetchFollowUps = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(API_ENDPOINTS.GET_CONTACTS, {
+      const response = await fetch(API_ENDPOINTS.FOLLOW_UPS, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) {
         if (response.status === 401) { logout(); navigate("/admin"); return; }
-        throw new Error("Failed to fetch contacts");
+        throw new Error("Failed to fetch follow-ups");
       }
       const data = await response.json();
       setContacts(data.data || data.contacts || []);
@@ -122,12 +137,20 @@ const Admin = () => {
     }
   }, [token, logout, navigate]);
 
-  useEffect(() => { fetchContacts(); }, [fetchContacts]);
+  useEffect(() => { fetchFollowUps(); }, [fetchFollowUps]);
+
+  // Parse URL params for initial filter
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const filterParam = params.get("filter") as FilterPeriod | null;
+    if (filterParam && ["all", "today", "overdue", "upcoming"].includes(filterParam)) {
+      setFilter(filterParam);
+    }
+  }, [location.search]);
 
   // Called when user selects a status from dropdown
   const handleStatusSelect = (contactId: string, newStatus: string) => {
     if (newStatus === "Follow-up Required" || newStatus === "Follow-up Set") {
-      // Open follow-up date popup
       const contact = contacts.find((c) => c._id === contactId);
       if (contact) {
         setFollowUpContact(contact);
@@ -137,7 +160,6 @@ const Admin = () => {
       return;
     }
     if (NOTE_STATUSES.includes(newStatus)) {
-      // Open note popup
       const contact = contacts.find((c) => c._id === contactId);
       if (contact) {
         setOtherContact(contact);
@@ -146,7 +168,6 @@ const Admin = () => {
       }
       return;
     }
-    // For all other statuses, update directly
     handleStatusChange(contactId, newStatus);
   };
 
@@ -162,9 +183,7 @@ const Admin = () => {
         const updated = { ...c, status: newStatus };
         if (extra?.statusNote !== undefined) updated.statusNote = extra.statusNote;
         if (extra?.followUpDate !== undefined) updated.followUpDate = extra.followUpDate || undefined;
-        // Clear note if switching away from a note-requiring status
         if (NOTE_STATUSES.includes(prevContact.status) && !NOTE_STATUSES.includes(newStatus)) updated.statusNote = "";
-        // Clear date if switching away from "Follow-up Required"
         if (prevContact.status === "Follow-up Required" && newStatus !== "Follow-up Required" && newStatus !== "Follow-up Set") updated.followUpDate = undefined;
         if (prevContact.status === "Follow-up Set" && newStatus !== "Follow-up Set" && newStatus !== "Follow-up Required") updated.followUpDate = undefined;
         return updated;
@@ -218,82 +237,6 @@ const Admin = () => {
     setOtherContact(null);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-  };
-
-  // Convert a Date object to YYYY-MM-DD using local timezone (avoids UTC shift)
-  const toLocalDateStr = (date: Date) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-};
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-  };
-
-  const totalContacts = contacts.length;
-  const uniqueEmails = new Set(contacts.map((c) => c.email)).size;
-  const todayStr = toLocalDateStr(new Date());
-  const todayFollowUps = contacts.filter((c) => {
-    if (!c.followUpDate) return false;
-    return toLocalDateStr(new Date(c.followUpDate)) === todayStr;
-  }).length;
-
-  const allCourses = useMemo(() => {
-    const courseSet = new Set<string>();
-    contacts.forEach((c) => c.courses?.forEach((course) => courseSet.add(course)));
-    return Array.from(courseSet).sort();
-  }, [contacts]);
-
-  const filteredContacts = useMemo(() => {
-    let result = contacts;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((c) =>
-        c.name?.toLowerCase().includes(q) ||
-        c.email?.toLowerCase().includes(q) ||
-        c.mobileNo?.toLowerCase().includes(q) ||
-        c.courses?.some((course) => course.toLowerCase().includes(q)) ||
-        (c.status || "New Lead").toLowerCase().includes(q)
-      );
-    }
-    if (filterStatus !== "all") result = result.filter((c) => getDisplayStatus(c) === filterStatus);
-    if (filterCourse !== "all") result = result.filter((c) => c.courses?.includes(filterCourse));
-    return result;
-  }, [contacts, searchQuery, filterStatus, filterCourse]);
-
-  // Reset page when filters change
-  useEffect(() => { setCurrentPage(1); }, [searchQuery, filterStatus, filterCourse]);
-
-  const totalPages = Math.ceil(filteredContacts.length / ITEMS_PER_PAGE);
-  const paginatedContacts = filteredContacts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
-  const getPageNumbers = (current: number, total: number): (number | "...")[] => {
-    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-    const pages: (number | "...")[] = [1];
-    if (current > 3) pages.push("...");
-    for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) pages.push(i);
-    if (current < total - 2) pages.push("...");
-    pages.push(total);
-    return pages;
-  };
-
-  const navItems = [
-    { id: "dashboard", label: "Dashboard", icon: ClipboardList, path: "/admin/dashboard" },
-    { id: "qualified", label: "Qualified Leads", icon: UserCheck, path: "/admin/qualified-leads" },
-    { id: "follow-ups", label: "Follow-ups", icon: Clock, path: "/admin/follow-ups" },
-    ...(isSuperAdmin ? [{ id: "staff", label: "Staff", icon: UserCog, path: "/admin/staff" }] : []),
-  ];
-
-  const statCards = [
-    { title: "Total Leads", value: totalContacts, icon: Users, gradient: "from-navy to-navy-medium", iconBg: "bg-white/20" },
-    { title: "Unique Contacts", value: uniqueEmails, icon: Mail, gradient: "from-gold to-amber-500", iconBg: "bg-white/20" },
-    { title: "Today's Follow-ups", value: todayFollowUps, icon: Clock, gradient: "from-orange-500 to-amber-500", iconBg: "bg-white/20", clickable: true, onClick: () => navigate("/admin/follow-ups?filter=today") },
-    { title: "Qualified Leads", value: contacts.filter(c => c.status === "Qualified").length, icon: UserCheck, gradient: "from-cyan-600 to-cyan-500", iconBg: "bg-white/20", clickable: true, onClick: () => navigate("/admin/qualified-leads") },
-  ];
-
   const renderContactInfo = (contact: Contact) => (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
@@ -328,7 +271,7 @@ const Admin = () => {
         </div>
         <div className="flex items-center gap-2 text-sm">
           <CalendarIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-          <span>{formatDate(contact.createdAt)} at {formatTime(contact.createdAt)}</span>
+          <span>Submitted: {formatDate(contact.createdAt)}</span>
         </div>
       </div>
       {contact.followUpDate && (
@@ -343,14 +286,99 @@ const Admin = () => {
           <p className="text-sm text-purple-800">{contact.statusNote}</p>
         </div>
       )}
-      {contact.assignedTo && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Users className="h-4 w-4 shrink-0" />
-          <span>Assigned to: {contact.assignedTo.name}</span>
-        </div>
-      )}
     </div>
   );
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Filter by date period, then sort: today first, then overdue, then upcoming
+  const filteredContacts = useMemo(() => {
+    let result = contacts.filter((c) => {
+      if (!c.followUpDate) return false;
+      const d = toLocalDate(c.followUpDate);
+
+      switch (filter) {
+        case "today": return d.getTime() === today.getTime();
+        case "overdue": return d.getTime() < today.getTime();
+        case "upcoming": return d.getTime() > today.getTime();
+        default: return true;
+      }
+    });
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((c) =>
+        c.name?.toLowerCase().includes(q) ||
+        c.email?.toLowerCase().includes(q) ||
+        c.mobileNo?.toLowerCase().includes(q) ||
+        c.courses?.some((course) => course.toLowerCase().includes(q)) ||
+        getDisplayStatus(c).toLowerCase().includes(q)
+      );
+    }
+
+    // Sort: today's follow-ups first, then overdue, then upcoming, then others
+    result.sort((a, b) => {
+      const aDate = a.followUpDate ? toLocalDate(a.followUpDate) : new Date(0);
+      const bDate = b.followUpDate ? toLocalDate(b.followUpDate) : new Date(0);
+
+      const aIsToday = aDate.getTime() === today.getTime();
+      const bIsToday = bDate.getTime() === today.getTime();
+      const aIsOverdue = aDate.getTime() < today.getTime();
+      const bIsOverdue = bDate.getTime() < today.getTime();
+
+      // Today first
+      if (aIsToday && !bIsToday) return -1;
+      if (!aIsToday && bIsToday) return 1;
+      // Then overdue (most overdue first)
+      if (aIsOverdue && bIsOverdue) return aDate.getTime() - bDate.getTime();
+      if (aIsOverdue && !bIsOverdue) return -1;
+      if (!aIsOverdue && bIsOverdue) return 1;
+      // Then upcoming (soonest first)
+      return aDate.getTime() - bDate.getTime();
+    });
+
+    return result;
+  }, [contacts, filter, searchQuery, today]);
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [filter, searchQuery]);
+
+  const totalPages = Math.ceil(filteredContacts.length / ITEMS_PER_PAGE);
+  const paginatedContacts = filteredContacts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  const getPageNumbers = (current: number, total: number): (number | "...")[] => {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    const pages: (number | "...")[] = [1];
+    if (current > 3) pages.push("...");
+    for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) pages.push(i);
+    if (current < total - 2) pages.push("...");
+    pages.push(total);
+    return pages;
+  };
+
+  const overdueCount = contacts.filter((c) => {
+    if (!c.followUpDate) return false;
+    return toLocalDate(c.followUpDate).getTime() < today.getTime();
+  }).length;
+
+  const todayCount = contacts.filter((c) => {
+    if (!c.followUpDate) return false;
+    return toLocalDate(c.followUpDate).getTime() === today.getTime();
+  }).length;
+
+  const upcomingCount = contacts.filter((c) => {
+    if (!c.followUpDate) return false;
+    return toLocalDate(c.followUpDate).getTime() > today.getTime();
+  }).length;
+
+  const navItems = [
+    { id: "dashboard", label: "Dashboard", icon: ClipboardList, path: "/admin/dashboard" },
+    { id: "qualified", label: "Qualified Leads", icon: UserCheck, path: "/admin/qualified-leads" },
+    { id: "follow-ups", label: "Follow-ups", icon: Clock, path: "/admin/follow-ups" },
+    ...(isSuperAdmin ? [{ id: "staff", label: "Staff", icon: UserCog, path: "/admin/staff" }] : []),
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-hero section-pattern">
@@ -358,17 +386,28 @@ const Admin = () => {
         <div className="container mx-auto px-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="text-center sm:text-left">
-              <h1 className="text-2xl md:text-3xl font-bold font-heading">Admin Dashboard</h1>
+              <h1 className="text-2xl md:text-3xl font-bold font-heading">Follow-ups</h1>
               {admin && <p className="text-white/70 text-sm mt-1">Welcome, {admin.name || admin.email}</p>}
             </div>
             <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2 bg-white/10 border-white/20 text-white hover:bg-white/20">
-              <LogOut className="h-4 w-4" />Logout
+              <LogOut className="h-4 w-4" />
+              Logout
             </Button>
           </div>
           <nav className="flex gap-1 mt-4 border-b border-white/20">
             {navItems.map((item) => (
-              <button key={item.id} onClick={() => navigate(item.path)} className={cn("flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-[2px]", location.pathname === item.path ? "border-gold text-white" : "border-transparent text-white/60 hover:text-white hover:border-white/40")}>
-                <item.icon className="h-4 w-4" />{item.label}
+              <button
+                key={item.id}
+                onClick={() => navigate(item.path)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-[2px]",
+                  location.pathname === item.path
+                    ? "border-gold text-white"
+                    : "border-transparent text-white/60 hover:text-white hover:border-white/40"
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
               </button>
             ))}
           </nav>
@@ -376,86 +415,99 @@ const Admin = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
-          {statCards.map((stat, index) => (
-            <Card key={index} className={cn("relative overflow-hidden border-0 shadow-lg bg-gradient-to-br", stat.gradient, stat.clickable && "cursor-pointer hover:shadow-xl transition-shadow")} onClick={stat.clickable ? stat.onClick : undefined}>
-              <CardContent className="p-4 md:p-6">
-                <div className="flex items-center justify-between">
-                  <div><p className="text-white/80 text-xs md:text-sm font-medium">{stat.title}</p><p className="text-white text-xl md:text-2xl font-bold mt-1">{stat.value}</p></div>
-                  <div className={cn("p-2 md:p-3 rounded-xl", stat.iconBg)}><stat.icon className="h-5 w-5 md:h-6 md:w-6 text-white" /></div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+        {/* Summary Cards */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <Card className={cn("cursor-pointer border-0 shadow-lg transition-shadow", filter === "overdue" ? "ring-2 ring-red-400" : "")} onClick={() => setFilter("overdue")}>
+            <CardContent className="p-4 text-center">
+              <p className="text-red-600 text-2xl font-bold">{overdueCount}</p>
+              <p className="text-sm text-muted-foreground">Overdue</p>
+            </CardContent>
+          </Card>
+          <Card className={cn("cursor-pointer border-0 shadow-lg transition-shadow", filter === "today" ? "ring-2 ring-orange-400" : "")} onClick={() => setFilter("today")}>
+            <CardContent className="p-4 text-center">
+              <p className="text-orange-600 text-2xl font-bold">{todayCount}</p>
+              <p className="text-sm text-muted-foreground">Today</p>
+            </CardContent>
+          </Card>
+          <Card className={cn("cursor-pointer border-0 shadow-lg transition-shadow", filter === "upcoming" ? "ring-2 ring-emerald-400" : "")} onClick={() => setFilter("upcoming")}>
+            <CardContent className="p-4 text-center">
+              <p className="text-emerald-600 text-2xl font-bold">{upcomingCount}</p>
+              <p className="text-sm text-muted-foreground">Upcoming</p>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Leads Table */}
+        {/* Follow-ups Table */}
         <Card className="shadow-xl border-0 overflow-hidden">
           <CardHeader className="bg-navy/5 border-b">
             <div className="flex flex-col gap-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                  <CardTitle className="text-xl md:text-2xl text-navy">Lead Management</CardTitle>
-                  <p className="text-muted-foreground text-sm mt-1">{loading ? "Loading..." : `${filteredContacts.length} of ${totalContacts} leads`}</p>
+                  <CardTitle className="text-xl md:text-2xl text-navy">Follow-up Schedule</CardTitle>
+                  <p className="text-muted-foreground text-sm mt-1">
+                    {loading ? "Loading..." : `${filteredContacts.length} contacts${filter !== "all" ? ` (${filter})` : ""}`}
+                  </p>
                 </div>
-                <Button variant="outline" size="sm" onClick={fetchContacts} disabled={loading} className="gap-2 self-start">
-                  <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />Refresh
-                </Button>
+                <div className="flex gap-2 items-center self-start">
+                  <Button variant="outline" size="sm" onClick={fetchFollowUps} disabled={loading} className="gap-2">
+                    <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                    Refresh
+                  </Button>
+                </div>
               </div>
+
+              {/* Search & Filter */}
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Search by name, phone, email, course, or status..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-9" />
-                  {searchQuery && (<button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="h-4 w-4 text-muted-foreground hover:text-foreground" /></button>)}
-                </div>
-                <Button variant="outline" size="sm" className={cn("gap-2 h-9", showFilters && "bg-muted")} onClick={() => setShowFilters(!showFilters)}>
-                  <Filter className="h-4 w-4" />Filters
-                </Button>
-              </div>
-              {showFilters && (
-                <div className="flex flex-wrap gap-3 pt-1">
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Lead Status" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      {LEAD_STATUSES.map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={filterCourse} onValueChange={setFilterCourse}>
-                    <SelectTrigger className="w-[150px] h-9"><SelectValue placeholder="Course" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Courses</SelectItem>
-                      {allCourses.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
-                  {(filterStatus !== "all" || filterCourse !== "all") && (
-                    <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setFilterStatus("all"); setFilterCourse("all"); }}>Clear Filters</Button>
+                  <Input
+                    placeholder="Search by name, phone, email, course, or status..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 h-9"
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                    </button>
                   )}
                 </div>
-              )}
+                <div className="flex gap-2">
+                  <Select value={filter} onValueChange={(v) => setFilter(v as FilterPeriod)}>
+                    <SelectTrigger className="w-[140px] h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="overdue">Overdue</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="upcoming">Upcoming</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
           </CardHeader>
-
           <CardContent className="p-0">
             {loading && (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                <RefreshCw className="h-10 w-10 animate-spin mb-4 text-gold" /><p className="font-medium">Loading contacts...</p>
+                <RefreshCw className="h-10 w-10 animate-spin mb-4 text-gold" />
+                <p className="font-medium">Loading follow-ups...</p>
               </div>
             )}
             {error && (
               <div className="flex flex-col items-center justify-center py-16 px-4">
                 <div className="bg-destructive/10 rounded-full p-4 mb-4"><AlertCircle className="h-10 w-10 text-destructive" /></div>
-                <p className="font-medium text-destructive mb-2">Failed to load contacts</p>
+                <p className="font-medium text-destructive mb-2">Failed to load follow-ups</p>
                 <p className="text-muted-foreground text-sm mb-4">{error}</p>
-                <Button variant="outline" onClick={fetchContacts}>Try Again</Button>
+                <Button variant="outline" onClick={fetchFollowUps}>Try Again</Button>
               </div>
             )}
             {!loading && !error && filteredContacts.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-                <div className="bg-muted rounded-full p-4 mb-4"><Users className="h-10 w-10 text-muted-foreground" /></div>
-                <p className="font-medium text-foreground mb-1">{contacts.length === 0 ? "No contacts found" : "No matching leads"}</p>
-                <p className="text-muted-foreground text-sm">{contacts.length === 0 ? "Contact submissions will appear here when users submit the registration form." : "Try adjusting your search or filters."}</p>
+                <div className="bg-muted rounded-full p-4 mb-4"><Clock className="h-10 w-10 text-muted-foreground" /></div>
+                <p className="font-medium text-foreground mb-1">No follow-ups {filter !== "all" ? `(${filter})` : ""}</p>
+                <p className="text-muted-foreground text-sm">Contacts with follow-up dates will appear here.</p>
               </div>
             )}
             {!loading && !error && filteredContacts.length > 0 && (
@@ -464,78 +516,98 @@ const Admin = () => {
                   <thead>
                     <tr className="bg-muted/50 border-b">
                       <th className="text-left p-4 font-semibold text-foreground text-sm w-[50px]">Sr No</th>
-                      <th className="text-left p-4 font-semibold text-foreground text-sm"><Users className="h-4 w-4 text-muted-foreground inline mr-1" /> Name</th>
-                      <th className="text-left p-4 font-semibold text-foreground text-sm hidden sm:table-cell"><Mail className="h-4 w-4 text-muted-foreground inline mr-1" /> Email</th>
-                      <th className="text-left p-4 font-semibold text-foreground text-sm"><Phone className="h-4 w-4 text-muted-foreground inline mr-1" /> Phone</th>
-                      <th className="text-left p-4 font-semibold text-foreground text-sm hidden md:table-cell"><BookOpen className="h-4 w-4 text-muted-foreground inline mr-1" /> Courses</th>
+                      <th className="text-left p-4 font-semibold text-foreground text-sm"><div className="flex items-center gap-2"><Users className="h-4 w-4 text-muted-foreground" /> Name</div></th>
+                      <th className="text-left p-4 font-semibold text-foreground text-sm hidden sm:table-cell"><div className="flex items-center gap-2"><Mail className="h-4 w-4 text-muted-foreground" /> Email</div></th>
+                      <th className="text-left p-4 font-semibold text-foreground text-sm"><div className="flex items-center gap-2"><Phone className="h-4 w-4 text-muted-foreground" /> Phone</div></th>
+                      <th className="text-left p-4 font-semibold text-foreground text-sm hidden md:table-cell"><div className="flex items-center gap-2"><BookOpen className="h-4 w-4 text-muted-foreground" /> Course</div></th>
+                      <th className="text-left p-4 font-semibold text-foreground text-sm">Follow-up Date</th>
                       <th className="text-left p-4 font-semibold text-foreground text-sm">Status</th>
-                      <th className="text-left p-4 font-semibold text-foreground text-sm hidden lg:table-cell"><CalendarIcon className="h-4 w-4 text-muted-foreground inline mr-1" /> Date</th>
                       <th className="text-left p-4 font-semibold text-foreground text-sm">Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedContacts.map((contact, index) => (
-                      <tr key={contact._id} className={cn("border-b hover:bg-muted/30 transition-colors", index % 2 === 0 ? "bg-background" : "bg-muted/10")}>
-                        <td className="p-4 text-sm text-muted-foreground font-medium">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-3">
-                            <div className="hidden sm:flex h-9 w-9 rounded-full gradient-gold items-center justify-center text-white font-semibold text-sm shrink-0">
-                              {contact.name?.charAt(0)?.toUpperCase() || "U"}
+                    {paginatedContacts.map((contact, index) => {
+                      const followUpDate = contact.followUpDate ? toLocalDate(contact.followUpDate) : null;
+                      const isOverdue = followUpDate ? followUpDate.getTime() < today.getTime() : false;
+                      const isToday = followUpDate ? followUpDate.getTime() === today.getTime() : false;
+
+                      return (
+                        <tr
+                          key={contact._id}
+                          className={cn(
+                            "border-b hover:bg-muted/30 transition-colors",
+                            index % 2 === 0 ? "bg-background" : "bg-muted/10",
+                            isOverdue && "bg-red-50/50",
+                            isToday && "bg-orange-50/50"
+                          )}
+                        >
+                          <td className="p-4 text-sm text-muted-foreground font-medium">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <div className="hidden sm:flex h-9 w-9 rounded-full gradient-gold items-center justify-center text-white font-semibold text-sm shrink-0">
+                                {contact.name?.charAt(0)?.toUpperCase() || "U"}
+                              </div>
+                              <div>
+                                <p className="font-medium text-foreground">{contact.name}</p>
+                                <p className="text-xs text-muted-foreground sm:hidden">{contact.email}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium text-foreground">{contact.name}</p>
-                              <p className="text-xs text-muted-foreground sm:hidden">{contact.email}</p>
+                          </td>
+                          <td className="p-4 hidden sm:table-cell">
+                            <a href={`mailto:${contact.email}`} className="text-primary hover:text-gold transition-colors text-sm">{contact.email}</a>
+                          </td>
+                          <td className="p-4">
+                            <a href={`tel:${contact.mobileNo}`} className="font-mono text-sm text-primary hover:text-gold transition-colors">{contact.mobileNo}</a>
+                          </td>
+                          <td className="p-4 hidden md:table-cell">
+                            <div className="flex flex-wrap gap-1">
+                              {contact.courses && contact.courses.length > 0 ? (
+                                contact.courses.map((course) => (
+                                  <span key={course} className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-medium", course === "A1" && "bg-green-100 text-green-700", course === "A2" && "bg-blue-100 text-blue-700", course === "B1" && "bg-purple-100 text-purple-700", course === "B2" && "bg-orange-100 text-orange-700")}>{course}</span>
+                                ))
+                              ) : <span className="text-muted-foreground">-</span>}
                             </div>
-                          </div>
-                        </td>
-                        <td className="p-4 hidden sm:table-cell">
-                          <a href={`mailto:${contact.email}`} className="text-primary hover:text-gold transition-colors">{contact.email}</a>
-                        </td>
-                        <td className="p-4">
-                          <a href={`tel:${contact.mobileNo}`} className="font-mono text-sm text-primary hover:text-gold transition-colors">{contact.mobileNo}</a>
-                        </td>
-                        <td className="p-4 hidden md:table-cell">
-                          <div className="flex flex-wrap gap-1">
-                            {contact.courses && contact.courses.length > 0 ? (
-                              contact.courses.map((course) => (
-                                <span key={course} className={cn("inline-flex items-center px-2 py-1 rounded-md text-xs font-medium", course === "A1" && "bg-green-100 text-green-700", course === "A2" && "bg-blue-100 text-blue-700", course === "B1" && "bg-purple-100 text-purple-700", course === "B2" && "bg-orange-100 text-orange-700")}>{course}</span>
-                              ))
-                            ) : <span className="text-muted-foreground">-</span>}
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-2 min-w-[140px]">
-                            <Select
-                              value={getDisplayStatus(contact)}
-                              onValueChange={(value) => handleStatusSelect(contact._id, value)}
-                              disabled={updatingId === contact._id}
-                            >
-                              <SelectTrigger className="h-8 text-xs border-border flex-1">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {LEAD_STATUSES.map((status) => (
-                                  <SelectItem key={status} value={status}>{status}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {updatingId === contact._id && <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />}
-                          </div>
-                        </td>
-                        <td className="p-4 hidden lg:table-cell">
-                          <div>
-                            <p className="text-foreground text-sm">{formatDate(contact.createdAt)}</p>
-                            <p className="text-xs text-muted-foreground">{formatTime(contact.createdAt)}</p>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <Button variant="ghost" size="sm" className="gap-1.5 h-8 px-2" onClick={() => setViewContact(contact)}>
-                            <Eye className="h-3.5 w-3.5" />
-                            <span className="text-xs">View</span>
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center gap-2">
+                              <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              <div>
+                                <p className={cn("text-sm font-medium", isOverdue && "text-red-600", isToday && "text-orange-600")}>
+                                  {contact.followUpDate ? formatDate(contact.followUpDate) : "-"}
+                                </p>
+                                {isOverdue && <p className="text-xs text-red-500">Overdue</p>}
+                                {isToday && <p className="text-xs text-orange-500">Today</p>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center gap-2 min-w-[140px]">
+                              <Select
+                                value={getDisplayStatus(contact)}
+                                onValueChange={(value) => handleStatusSelect(contact._id, value)}
+                                disabled={updatingId === contact._id}
+                              >
+                                <SelectTrigger className="h-8 text-xs border-border flex-1">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {LEAD_STATUSES.map((status) => (
+                                    <SelectItem key={status} value={status}>{status}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {updatingId === contact._id && <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />}
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <Button variant="ghost" size="sm" className="gap-1.5 h-8 px-2" onClick={() => setViewContact(contact)}>
+                              <Eye className="h-3.5 w-3.5" />
+                              <span className="text-xs">View</span>
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -561,37 +633,42 @@ const Admin = () => {
         {!loading && !error && paginatedContacts.length > 0 && (
           <div className="mt-6 md:hidden space-y-4">
             <h3 className="text-lg font-semibold text-foreground px-1">Quick View</h3>
-            {paginatedContacts.map((contact) => (
-              <Card key={contact._id} className="shadow-md">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 rounded-full gradient-gold flex items-center justify-center text-white font-semibold shrink-0">
-                      {contact.name?.charAt(0)?.toUpperCase() || "U"}
-                    </div>
-                    <div className="flex-1 min-w-0 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="font-medium text-foreground truncate">{contact.name}</p>
-                        <div className="flex items-center gap-1">
-                          <span className={cn("text-xs px-2 py-0.5 rounded-full border", STATUS_COLORS[getDisplayStatus(contact)] || "bg-gray-100 text-gray-700 border-gray-200")}>
-                            {getDisplayStatus(contact)}
-                          </span>
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setViewContact(contact)}>
-                            <Eye className="h-3.5 w-3.5" />
-                          </Button>
+            {paginatedContacts.map((contact) => {
+              const followUpDate = contact.followUpDate ? toLocalDate(contact.followUpDate) : null;
+              const isOverdue = followUpDate ? followUpDate.getTime() < today.getTime() : false;
+              const isToday = followUpDate ? followUpDate.getTime() === today.getTime() : false;
+
+              return (
+                <Card key={contact._id} className="shadow-md">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="h-10 w-10 rounded-full gradient-gold flex items-center justify-center text-white font-semibold shrink-0">
+                        {contact.name?.charAt(0)?.toUpperCase() || "U"}
+                      </div>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <p className="font-medium text-foreground truncate">{contact.name}</p>
+                          <div className="flex items-center gap-1">
+                            <span className={cn("text-xs px-2 py-0.5 rounded-full border", STATUS_COLORS[getDisplayStatus(contact)] || "bg-gray-100 text-gray-700 border-gray-200")}>
+                              {getDisplayStatus(contact)}
+                            </span>
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setViewContact(contact)}>
+                              <Eye className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                      <a href={`tel:${contact.mobileNo}`} className="text-sm text-primary hover:text-gold block">{contact.mobileNo}</a>
-                      <a href={`mailto:${contact.email}`} className="text-sm text-muted-foreground truncate block">{contact.email}</a>
-                      <div className="flex flex-wrap gap-1">
-                        {contact.courses?.map((course) => (
-                          <span key={course} className={cn("px-2 py-0.5 rounded text-xs font-medium", course === "A1" && "bg-green-100 text-green-700", course === "A2" && "bg-blue-100 text-blue-700", course === "B1" && "bg-purple-100 text-purple-700", course === "B2" && "bg-orange-100 text-orange-700")}>{course}</span>
-                        ))}
+                        <a href={`tel:${contact.mobileNo}`} className="text-sm text-primary hover:text-gold block">{contact.mobileNo}</a>
+                        <p className={cn("text-sm", isOverdue && "text-red-600", isToday && "text-orange-600", !isOverdue && !isToday && "text-muted-foreground")}>
+                          Follow-up: {contact.followUpDate ? formatDate(contact.followUpDate) : "-"}
+                          {isOverdue && " (Overdue)"}
+                          {isToday && " (Today)"}
+                        </p>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
             {totalPages > 1 && (
               <div className="flex items-center justify-center gap-1 pt-2">
                 <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(currentPage - 1)}>Prev</Button>
@@ -605,7 +682,6 @@ const Admin = () => {
             )}
           </div>
         )}
-
       </main>
 
       {/* Follow-up Date Popup */}
@@ -674,7 +750,7 @@ const Admin = () => {
         </DialogContent>
       </Dialog>
 
-      {/* View Lead Detail Popup */}
+      {/* View Contact Detail Popup */}
       <Dialog open={!!viewContact} onOpenChange={(open) => { if (!open) setViewContact(null); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -697,4 +773,4 @@ const Admin = () => {
   );
 };
 
-export default Admin;
+export default FollowUps;

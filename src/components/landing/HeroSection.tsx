@@ -117,7 +117,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronRight, Star } from "lucide-react";
 import { FaUsers, FaBookOpen, FaStar } from "react-icons/fa";
 import heroImg from "@/assets/hero-students.jpg";
-import { useRegisterModal } from "@/context/RegisterModalContext";
+import { useNavigate } from "react-router-dom";
 import { GiCanada } from "react-icons/gi";
 const stats = [
   { icon: FaUsers, value: "500+", label: "Students Enrolled" },
@@ -126,7 +126,7 @@ const stats = [
 ];
 
 const HeroSection = () => {
-  const { openModal } = useRegisterModal();
+  const navigate = useNavigate();
 
   return (
     <section id="home" className="relative pt-24 pb-0 overflow-hidden gradient-hero">
@@ -175,7 +175,7 @@ const HeroSection = () => {
                 variant="gold"
                 size="xl"
                 className="shadow-gold w-full py-6 text-lg cta-shimmer cta-hover"
-                onClick={openModal}
+                onClick={() => navigate('/register')}
               >
                 Register Now <ChevronRight size={24} />
               </Button>

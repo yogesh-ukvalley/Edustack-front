@@ -1,3 +1,6 @@
+import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import { scrollToSection } from "@/config/navigation";
 import Navbar from "@/components/landing/Navbar";
 import HeroSection from "@/components/landing/HeroSection";
 import AboutSection from "@/components/landing/AboutSection";
@@ -10,7 +13,16 @@ import CTASection from "@/components/landing/CTASection";
 import ContactSection from "@/components/landing/ContactSection";
 import Footer from "@/components/landing/Footer";
 
-const Index = () => (
+const Index = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.hash) {
+      setTimeout(() => scrollToSection(location.hash), 100);
+    }
+  }, [location]);
+
+  return (
   <>
     <Navbar />
     <HeroSection />
@@ -24,6 +36,7 @@ const Index = () => (
     {/* <ContactSection /> */}
     <Footer />
   </>
-);
+  );
+};
 
 export default Index;

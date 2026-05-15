@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { ChevronRight, Sparkles } from "lucide-react";
 import eiffelImg from "@/assets/paris-eiffel.jpg";
-import { useRegisterModal } from "@/context/RegisterModalContext";
+import { useNavigate } from "react-router-dom";
 
 const CTASection = () => {
-  const { openModal } = useRegisterModal();
+  const navigate = useNavigate();
 
   return (
   <section className="py-20 md:py-28 relative overflow-hidden">
@@ -32,7 +32,7 @@ const CTASection = () => {
         Join hundreds of students who are building their future in Canada through French fluency. Don't wait — the next batch starts soon.
       </p>
       <div className="flex flex-wrap justify-center gap-4 pt-4">
-        <Button variant="gold" size="xl" className="shadow-gold cta-shimmer cta-hover" onClick={openModal}>
+        <Button variant="gold" size="xl" className="shadow-gold cta-shimmer cta-hover" onClick={() => navigate('/register')}>
           Register Now <ChevronRight size={18} />
         </Button>
         {/* <Button size="xl" className="bg-primary-foreground/10 text-primary-foreground border border-primary-foreground/20 hover:bg-primary-foreground/20 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">

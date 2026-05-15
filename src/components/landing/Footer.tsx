@@ -1,5 +1,6 @@
 import { Facebook, Instagram, Youtube, Linkedin } from "lucide-react";
-import { navLinks, handleNavClick } from "@/config/navigation";
+import { useNavigate, useLocation } from "react-router-dom";
+import { navLinks, scrollToSection } from "@/config/navigation";
 import logo from "@/assets/EdustackLogo.png";
 
 // How It Works steps - matches MethodSection
@@ -10,7 +11,20 @@ const howItWorksSteps = [
   { label: "Mentorship", href: "#method" },
 ];
 
-const Footer = () => (
+const Footer = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const onFooterNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    e.preventDefault();
+    if (location.pathname !== "/") {
+      navigate("/" + href);
+    } else {
+      scrollToSection(href);
+    }
+  };
+
+  return (
   <footer className="bg-white pt-14 pb-8 relative overflow-hidden border-t">
 
     {/* Subtle pattern */}
@@ -64,7 +78,7 @@ const Footer = () => (
               <a
                 key={l.href}
                 href={l.href}
-                onClick={(e) => handleNavClick(e, l.href)}
+                onClick={(e) => onFooterNavClick(e, l.href)}
                 className="block text-gray-600 hover:text-yellow-600 transition-colors text-sm cursor-pointer"
               >
                 {l.label}
@@ -89,7 +103,7 @@ const Footer = () => (
               <a
                 key={l.label}
                 href={l.href}
-                onClick={(e) => handleNavClick(e, l.href)}
+                onClick={(e) => onFooterNavClick(e, l.href)}
                 className="block text-gray-600 hover:text-yellow-600 transition-colors text-sm cursor-pointer"
               >
                 {l.label}
@@ -109,7 +123,7 @@ const Footer = () => (
               <a
                 key={l.label}
                 href={l.href}
-                onClick={(e) => handleNavClick(e, l.href)}
+                onClick={(e) => onFooterNavClick(e, l.href)}
                 className="block text-gray-600 hover:text-yellow-600 transition-colors text-sm cursor-pointer"
               >
                 {l.label}
@@ -127,6 +141,7 @@ const Footer = () => (
 
     </div>
   </footer>
-);
+  );
+};
 
 export default Footer;

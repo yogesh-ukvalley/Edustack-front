@@ -42,7 +42,7 @@
 
 import { GraduationCap, Plane, FileCheck, School, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useRegisterModal } from "@/context/RegisterModalContext";
+import { useNavigate } from "react-router-dom";
 
 const audiences = [
   {
@@ -74,7 +74,7 @@ const audiences = [
 ];
 
 const AudienceSection = () => {
-  const { openModal } = useRegisterModal();
+  const navigate = useNavigate();
 
   return (
     <section className="py-20 md:py-28 gradient-navy relative overflow-hidden">
@@ -152,7 +152,7 @@ const AudienceSection = () => {
           className="flex justify-center mt-14 animate-fade-up"
           style={{ animationDelay: "0.3s" }}
         >
-          <Button variant="gold" size="xl" className="shadow-gold cta-shimmer" onClick={openModal}>
+          <Button variant="gold" size="xl" className="shadow-gold cta-shimmer" onClick={() => navigate('/register')}>
             Register Now <ChevronRight size={18} />
           </Button>
         </div>

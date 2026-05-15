@@ -55,7 +55,7 @@
 import studyImg from "@/assets/study-books.jpg";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useRegisterModal } from "@/context/RegisterModalContext";
+import { useNavigate } from "react-router-dom";
 
 const levels = [
   {
@@ -85,7 +85,7 @@ const levels = [
 ];
 
 const LevelsSection = () => {
-  const { openModal } = useRegisterModal();
+  const navigate = useNavigate();
 
   return (
   <section id="levels" className="py-20 md:py-28 bg-background section-pattern">
@@ -167,7 +167,7 @@ const LevelsSection = () => {
         className="flex justify-center mt-14 animate-fade-up"
         style={{ animationDelay: "0.3s" }}
       >
-        <Button variant="gold" size="xl" className="shadow-gold cta-shimmer cta-hover" onClick={openModal}>
+        <Button variant="gold" size="xl" className="shadow-gold cta-shimmer cta-hover" onClick={() => navigate('/register')}>
           Register Now <ChevronRight size={18} />
         </Button>
       </div>

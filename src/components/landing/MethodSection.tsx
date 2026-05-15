@@ -44,7 +44,7 @@
 
 import { Play, Video, Mic, HeartHandshake, ArrowRight, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useRegisterModal } from "@/context/RegisterModalContext";
+import { useNavigate } from "react-router-dom";
 
 const methods = [
   {
@@ -74,7 +74,7 @@ const methods = [
 ];
 
 const MethodSection = () => {
-  const { openModal } = useRegisterModal();
+  const navigate = useNavigate();
 
   return (
   <section id="method" className="py-20 md:py-28 bg-muted/50">
@@ -129,7 +129,7 @@ const MethodSection = () => {
         className="flex justify-center mt-14 animate-fade-up"
         style={{ animationDelay: "0.3s" }}
       >
-        <Button variant="gold" size="xl" className="shadow-gold cta-shimmer cta-hover" onClick={openModal}>
+        <Button variant="gold" size="xl" className="shadow-gold cta-shimmer cta-hover" onClick={() => navigate('/register')}>
           Register Now <ChevronRight size={18} />
         </Button>
       </div>
